@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { db, auth } from "@/lib/firebase";
+import { mcqDb } from "@/lib/firebaseMCQs";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import Link from "next/link";
 import CheckAuth from "../../../lib/CheckAuth";
@@ -14,12 +15,12 @@ export default function CodingQuestionsPage() {
 
   useEffect(() => {
     async function fetchQuestions() {
-      let q = collection(db, "questions");
+      let q = collection(mcqDb, "codingQuestions");
 
       if (difficulty !== "all") {
         q = query(
-          collection(db, "questions"),
-          where("category", "==", difficulty.charAt(0).toUpperCase() + difficulty.slice(1))
+          collection(mcqDb, "codingQuestions"),
+          where("level", "==", difficulty.charAt(0).toUpperCase() + difficulty.slice(1))
         );
       }
 
@@ -47,7 +48,7 @@ export default function CodingQuestionsPage() {
     try {
       if (!userId) return;
 
-      const userSolversRef = collection(db, "userSolutions");
+      const userSolversRef = collection(mcqDb, "userSolutions");
       const q = query(userSolversRef, where("userId", "==", userId));
       const snap = await getDocs(q);
       
