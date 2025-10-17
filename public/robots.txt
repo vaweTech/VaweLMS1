@@ -1,0 +1,14 @@
+# *
+User-agent: *
+Allow: /
+Disallow: /Admin/
+Disallow: /api/
+Disallow: /auth/
+Disallow: /forgot-password
+Disallow: /reset-password
+
+# Host
+Host: https://www.skillwins.in
+
+# Sitemaps
+Sitemap: https://www.skillwins.in/sitemap.xml
