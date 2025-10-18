@@ -375,12 +375,11 @@ export default function ManageMCQs() {
     
     // Handle options with images
     const baseOptions = Array.isArray(mcq.options) ? mcq.options : [];
-    const padded = [...baseOptions, ...Array(Math.max(0, 4 - baseOptions.length)).fill({ text: "", image: "" })];
     
-    const optionTexts = padded.slice(0, 4).map(opt => 
+    const optionTexts = baseOptions.map(opt => 
       typeof opt === 'string' ? opt : (opt.text || "")
     );
-    const optionImages = padded.slice(0, 4).map(opt => 
+    const optionImages = baseOptions.map(opt => 
       typeof opt === 'string' ? "" : (opt.image || "")
     );
     
@@ -459,6 +458,29 @@ export default function ManageMCQs() {
         return [...prev, optionText];
       }
     });
+  }
+
+  // Add one more option
+  function addMoreOption() {
+    setOptions(prev => [...prev, ""]);
+    setOptionImages(prev => [...prev, ""]);
+  }
+
+  // Remove an option
+  function removeOption(index) {
+    if (options.length <= 2) {
+      alert("At least 2 options are required.");
+      return;
+    }
+    
+    const optionToRemove = options[index];
+    setOptions(prev => prev.filter((_, i) => i !== index));
+    setOptionImages(prev => prev.filter((_, i) => i !== index));
+    
+    // Remove from answers if it was selected
+    if (answers.includes(optionToRemove)) {
+      setAnswers(prev => prev.filter(ans => ans !== optionToRemove));
+    }
   }
 
   // Migrate old flat MCQs to subcollection structure
@@ -774,6 +796,15 @@ export default function ManageMCQs() {
                   }}
                   className="border p-2"
                 />
+                {options.length > 2 && (
+                  <button
+                    onClick={() => removeOption(idx)}
+                    className="bg-red-400 hover:bg-red-500 text-white px-3 py-2 rounded text-sm"
+                    title="Remove this option"
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
               
               {/* Display uploaded image */}
@@ -794,12 +825,23 @@ export default function ManageMCQs() {
                     }}
                     className="ml-2 bg-rose-400 hover:bg-rose-500 text-white px-2 py-1 rounded text-sm"
                   >
-                    Remove
+                    Remove Image
                   </button>
                 </div>
               )}
             </div>
           ))}
+
+          {/* Add More Option Button */}
+          <div className="mb-4">
+            <button
+              onClick={addMoreOption}
+              className="bg-blue-400 hover:bg-blue-500 text-white px-4 py-2 rounded flex items-center gap-2"
+            >
+              <span>+</span>
+              Add More Option
+            </button>
+          </div>
 
           {/* Select correct answer(s) from entered options */}
           <div className="border p-4 rounded mb-3">
