@@ -581,7 +581,7 @@ export default function AdminPage() {
           question: (question.title || question.question || ""),
           options: processedOptions,
           correctAnswers: correctIndices,
-          explanation: "",
+          explanation: question.description || "", // Store description from practice bank as explanation
           type: "mcq"
         };
       } else {

@@ -140,9 +140,9 @@ export default function PracticeMCQ() {
     
     // Calculate score for this set
     const set = questionSets[setIndex];
-    const score = set.filter((_, qIndex) => {
-      const globalIndex = setIndex * 15 + qIndex;
-      const question = questions[globalIndex];
+    const score = set.questions.filter((question, qIndex) => {
+      // Find the global index of this question
+      const globalIndex = questions.findIndex(q => q.id === question.id);
       const selectedAnswer = selected[globalIndex];
       
       // Handle multiple correct answers
@@ -166,11 +166,25 @@ export default function PracticeMCQ() {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  // Group questions into sets of 15
+  // Group questions by category/chapter title
   const questionSets = [];
-  for (let i = 0; i < questions.length; i += 15) {
-    questionSets.push(questions.slice(i, i + 15));
-  }
+  const categoryMap = {};
+  
+  questions.forEach(question => {
+    const category = question.category || question.chapterTitle || 'Uncategorized';
+    if (!categoryMap[category]) {
+      categoryMap[category] = [];
+    }
+    categoryMap[category].push(question);
+  });
+  
+  // Convert category map to array of sets
+  Object.keys(categoryMap).forEach(category => {
+    questionSets.push({
+      category: category,
+      questions: categoryMap[category]
+    });
+  });
 
   // Calculate total score across all sets
   const totalScore = Object.values(setScores).reduce((sum, score) => sum + score, 0);
@@ -196,8 +210,8 @@ export default function PracticeMCQ() {
               <h2 className="text-xl font-semibold mb-4 text-center">Select a Set</h2>
               <div className="flex flex-wrap justify-center gap-3">
                 {questionSets.map((set, setIndex) => {
-                  const answeredCount = set.filter((_, qIndex) => {
-                    const globalIndex = setIndex * 15 + qIndex;
+                  const answeredCount = set.questions.filter((question) => {
+                    const globalIndex = questions.findIndex(q => q.id === question.id);
                     return selected[globalIndex];
                   }).length;
                   
@@ -210,7 +224,7 @@ export default function PracticeMCQ() {
                     <button
                       key={setIndex}
                       onClick={() => setCurrentSet(setIndex)}
-                      className={`p-4 rounded-lg border-2 transition-all min-w-[120px] ${
+                      className={`p-4 rounded-lg border-2 transition-all min-w-[140px] max-w-[200px] ${
                         isActive
                           ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md'
                           : isCompleted
@@ -218,16 +232,18 @@ export default function PracticeMCQ() {
                           : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
                       }`}
                     >
-                      <div className="text-sm font-medium">Set {setIndex + 1}</div>
-                      <div className="text-xs text-gray-600 mt-1">
-                        {answeredCount}/{set.length} answered
+                      <div className="text-sm font-medium text-center leading-tight">
+                        {set.category}
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-gray-600 mt-1 text-center">
+                        {answeredCount}/{set.questions.length} answered
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1 text-center">
                         Time: {formatTime(setTime)}
                       </div>
                       {isCompleted && (
-                        <div className="text-xs font-medium text-green-600 mt-1">
-                          Score: {score}/{set.length}
+                        <div className="text-xs font-medium text-green-600 mt-1 text-center">
+                          Score: {score}/{set.questions.length}
                         </div>
                       )}
                     </button>
@@ -253,14 +269,14 @@ export default function PracticeMCQ() {
                 {/* Set Header */}
                 <div className="text-center pb-4 border-b border-gray-200">
                   <h3 className="text-xl font-semibold text-gray-800">
-                    Set {currentSet + 1} - {questionSets[currentSet].length} Questions
+                    {questionSets[currentSet].category} - {questionSets[currentSet].questions.length} Questions
                   </h3>
                   <div className="flex justify-center items-center gap-4 mt-2">
                     <p className="text-sm text-gray-600">
-                      {questionSets[currentSet].filter((_, qIndex) => {
-                        const globalIndex = currentSet * 15 + qIndex;
+                      {questionSets[currentSet].questions.filter((question) => {
+                        const globalIndex = questions.findIndex(q => q.id === question.id);
                         return selected[globalIndex];
-                      }).length}/{questionSets[currentSet].length} answered
+                      }).length}/{questionSets[currentSet].questions.length} answered
                     </p>
                     <div className="text-sm font-medium bg-blue-100 text-blue-800 px-2 py-1 rounded">
                       ⏱ {formatTime(time[currentSet])}
@@ -269,8 +285,8 @@ export default function PracticeMCQ() {
                 </div>
 
                 {/* Questions */}
-                {questionSets[currentSet].map((q, localIndex) => {
-                  const globalIndex = currentSet * 15 + localIndex;
+                {questionSets[currentSet].questions.map((q, localIndex) => {
+                  const globalIndex = questions.findIndex(question => question.id === q.id);
                   
                   return (
                     <div
@@ -282,6 +298,18 @@ export default function PracticeMCQ() {
                       <h2 className="text-base sm:text-lg font-medium mb-3 sm:mb-4">
                         {localIndex + 1}. {q.question}
                       </h2>
+                      
+                      {/* MCQ Description */}
+                      {q.description && q.description.trim() && (
+                        <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg">
+                          <p className="text-sm text-blue-800 leading-relaxed">
+                            <span className="font-medium">Description:</span>
+                          </p>
+                          <div className="text-sm text-blue-800 leading-relaxed mt-1 whitespace-pre-wrap">
+                            {q.description}
+                          </div>
+                        </div>
+                      )}
                       
                       {q.questionImage && (
                         <div className="mb-4">
@@ -385,7 +413,7 @@ export default function PracticeMCQ() {
                       onClick={() => handleSubmitSet(currentSet)}
                       className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg shadow-md text-base"
                     >
-                      Submit Set {currentSet + 1}
+                      Submit {questionSets[currentSet].category}
                     </button>
                   </div>
                 )}
@@ -393,9 +421,9 @@ export default function PracticeMCQ() {
                 {/* Set Result */}
                 {showResult[currentSet] && (
                   <div className="mt-6 p-4 bg-green-100 text-green-900 rounded-lg shadow-md text-center">
-                    <p className="text-lg font-semibold">✅ Set {currentSet + 1} Completed!</p>
+                    <p className="text-lg font-semibold">✅ {questionSets[currentSet].category} Completed!</p>
                     <p className="mt-2 text-base">
-                      Score: <span className="font-bold">{setScores[currentSet]}</span> / {questionSets[currentSet].length}
+                      Score: <span className="font-bold">{setScores[currentSet]}</span> / {questionSets[currentSet].questions.length}
                     </p>
                     <p className="mt-1 text-sm text-gray-600">
                       Time Taken: {formatTime(time[currentSet])}
@@ -419,7 +447,7 @@ export default function PracticeMCQ() {
               <div className="mt-2 space-y-1">
                 {Object.keys(showResult).map(setIndex => (
                   <p key={setIndex} className="text-sm">
-                    Set {parseInt(setIndex) + 1}: {formatTime(time[setIndex])}
+                    {questionSets[parseInt(setIndex)]?.category}: {formatTime(time[setIndex])}
                   </p>
                 ))}
               </div>
