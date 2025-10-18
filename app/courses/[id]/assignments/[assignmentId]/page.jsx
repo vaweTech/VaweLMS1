@@ -652,6 +652,12 @@ export default function AssignmentSubmissionPage() {
                       <h3 className="text-lg font-medium mb-4">
                         Question {qIndex + 1}: {question.question}
                       </h3>
+                      {question.description && (
+                        <div className="mb-4 p-3 bg-gray-50 rounded border">
+                          <h4 className="font-medium text-gray-800 font-semibold mb-2">Description</h4>
+                          <div className="text-gray-700 leading-7 whitespace-pre-wrap">{question.description}</div>
+                        </div>
+                      )}
                       {hasMultipleAnswers && (
                         <p className="text-sm text-blue-600 italic mb-3">
                           ✓ Select all correct answers

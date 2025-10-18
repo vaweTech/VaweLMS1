@@ -51,6 +51,7 @@ export default function AdminPage() {
   const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [selectedDifficulty, setSelectedDifficulty] = useState("all");
   const [selectedMCQCategory, setSelectedMCQCategory] = useState("all");
+  const [selectedMCQChapter, setSelectedMCQChapter] = useState("all");
   const [selectedCodingLevel, setSelectedCodingLevel] = useState("all");
   const [selectedCodingTopic, setSelectedCodingTopic] = useState("all");
   const [showProgressTestForm, setShowProgressTestForm] = useState(false);
@@ -523,6 +524,7 @@ export default function AdminPage() {
       }
       setPracticeQuestions(loadedMcqs);
       setSelectedDifficulty("all");
+      setSelectedMCQChapter("all");
       setShowQuestionBank(true);
     } catch (error) {
       console.error("Error loading practice MCQs:", error);
@@ -539,6 +541,7 @@ export default function AdminPage() {
       setPracticeQuestions(questions);
       setSelectedDifficulty("all");
       setSelectedMCQCategory("all");
+      setSelectedMCQChapter("all");
       setSelectedCodingLevel("all");
       setSelectedCodingTopic("all");
       setShowQuestionBank(true);
@@ -599,6 +602,7 @@ export default function AdminPage() {
     setSelectedQuestions([]);
     setSelectedDifficulty("all");
     setSelectedMCQCategory("all");
+    setSelectedMCQChapter("all");
     setShowQuestionBank(false);
   }
 
@@ -1820,7 +1824,39 @@ Example:
               </div>
             )}
 
-            {/* Category Filter for MCQ Questions - removed (we filter by selected course) */}
+            {/* Chapter Filter for MCQ Questions */}
+            {newAssignment.type === "mcq" && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Chapter:</label>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    className={`px-3 py-1 rounded text-sm ${
+                      selectedMCQChapter === "all" ? "bg-blue-500 text-white" : "bg-gray-200"
+                    }`}
+                    onClick={() => setSelectedMCQChapter("all")}
+                  >
+                    All Chapters
+                  </button>
+                  {courses
+                    .filter(course => course.id === selectedMCQCategory || selectedMCQCategory === "all")
+                    .flatMap(course => course.chapters)
+                    .sort((a, b) => (a.order || 0) - (b.order || 0))
+                    .map((chapter) => (
+                      <button
+                        key={chapter.id}
+                        type="button"
+                        className={`px-3 py-1 rounded text-sm ${
+                          selectedMCQChapter === chapter.title ? "bg-purple-500 text-white" : "bg-gray-200"
+                        }`}
+                        onClick={() => setSelectedMCQChapter(chapter.title)}
+                      >
+                        📚 {chapter.title}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
             
                          <div className="space-y-4">
                               {/* Question count */}
@@ -1839,6 +1875,11 @@ Example:
                                       // Legacy support
                                       if (selectedDifficulty !== "all" && q.category === selectedDifficulty) {
                                         return true;
+                                      }
+                                    } else if (newAssignment.type === "mcq") {
+                                      // Filter by chapter for MCQ questions
+                                      if (selectedMCQChapter !== "all" && q.category !== selectedMCQChapter) {
+                                        return false;
                                       }
                                     }
                                     return true;
@@ -1860,8 +1901,12 @@ Example:
                      if (selectedDifficulty !== "all" && q.category === selectedDifficulty) {
                        return true;
                      }
+                   } else if (newAssignment.type === "mcq") {
+                     // Filter by chapter for MCQ questions
+                     if (selectedMCQChapter !== "all" && q.category !== selectedMCQChapter) {
+                       return false;
+                     }
                    }
-                   // For MCQ, we already filtered by course when loading; no extra filter needed
                    return true;
                  })
                 .map((q) => (
