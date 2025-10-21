@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withSuperAdminAuth } from '@/lib/apiAuth';
 import admin from '@/lib/firebaseAdmin';
-
 const adminDb = admin.firestore();
 
 async function getAnalyticsHandler(req) {

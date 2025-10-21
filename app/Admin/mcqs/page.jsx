@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -19,6 +18,8 @@ import {
   updateDoc,
   getDoc
 } from "firebase/firestore";
+import Papa from "papaparse";
+import * as XLSX from "xlsx";
 // Cloudinary upload function
 async function uploadToCloudinary(file) {
   const formData = new FormData();
@@ -70,6 +71,14 @@ export default function ManageMCQs() {
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [chapters, setChapters] = useState([]); // Chapters for selected course
   const [selectedChapter, setSelectedChapter] = useState("all"); // Selected chapter filter
+  
+  // CSV/Excel upload states
+  const [uploadFile, setUploadFile] = useState(null);
+  const [parsedQuestions, setParsedQuestions] = useState([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadCourse, setUploadCourse] = useState("");
+  const [uploadChapter, setUploadChapter] = useState("");
 
   // Load courses from Firestore
   useEffect(() => {
@@ -99,6 +108,14 @@ export default function ManageMCQs() {
     fetchCourses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load chapters when upload course changes
+  useEffect(() => {
+    if (uploadCourse) {
+      loadChapters(uploadCourse);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadCourse]);
 
   // Auth check
   useEffect(() => {
@@ -604,6 +621,231 @@ export default function ManageMCQs() {
     }
   }
 
+  // Handle CSV/Excel file upload
+  function handleFileUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const fileType = file.name.split('.').pop().toLowerCase();
+    
+    if (fileType === 'csv') {
+      parseCSV(file);
+    } else if (fileType === 'xlsx' || fileType === 'xls') {
+      parseExcel(file);
+    } else {
+      alert('Please upload a CSV or Excel file (.csv, .xlsx, .xls)');
+    }
+  }
+
+  // Parse CSV file
+  function parseCSV(file) {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: function(results) {
+        console.log("CSV parsed:", results.data);
+        processUploadedData(results.data);
+      },
+      error: function(error) {
+        console.error("CSV parsing error:", error);
+        alert("Error parsing CSV file. Please check the format.");
+      }
+    });
+  }
+
+  // Parse Excel file
+  function parseExcel(file) {
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        
+        // Get first sheet
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        console.log("Excel parsed:", jsonData);
+        processUploadedData(jsonData);
+      } catch (error) {
+        console.error("Excel parsing error:", error);
+        alert("Error parsing Excel file. Please check the format.");
+      }
+    };
+    
+    reader.readAsArrayBuffer(file);
+  }
+
+  // Process uploaded data and convert to MCQ format
+  function processUploadedData(data) {
+    try {
+      const questions = data.map((row, index) => {
+        // Expected columns: question, description, option1, option2, option3, option4, answer
+        // Answer can be comma-separated for multiple answers
+        
+        const options = [];
+        const optionFields = ['option1', 'option2', 'option3', 'option4', 'option5', 'option6'];
+        
+        // Collect non-empty options
+        optionFields.forEach(field => {
+          const value = row[field] || row[field.toUpperCase()] || row[field.charAt(0).toUpperCase() + field.slice(1)];
+          if (value && value.trim()) {
+            options.push({
+              text: value.trim(),
+              image: ""
+            });
+          }
+        });
+
+        // Get answers (can be comma-separated for multiple answers)
+        const answerField = row.answer || row.Answer || row.ANSWER || row.answers || row.Answers || row.ANSWERS || "";
+        const answers = answerField.toString().split(',').map(a => a.trim()).filter(a => a);
+
+        // Validate
+        if (!row.question && !row.Question && !row.QUESTION) {
+          console.warn(`Row ${index + 1}: No question found`);
+          return null;
+        }
+
+        if (options.length < 2) {
+          console.warn(`Row ${index + 1}: Less than 2 options found`);
+          return null;
+        }
+
+        if (answers.length === 0) {
+          console.warn(`Row ${index + 1}: No answer found`);
+          return null;
+        }
+
+        return {
+          question: (row.question || row.Question || row.QUESTION || "").trim(),
+          description: (row.description || row.Description || row.DESCRIPTION || "").trim(),
+          options: options,
+          answers: answers,
+          questionImage: "",
+          valid: true
+        };
+      }).filter(q => q !== null);
+
+      if (questions.length === 0) {
+        alert("No valid questions found in the file. Please check the format.\n\nExpected columns:\n- question\n- description (optional)\n- option1, option2, option3, option4\n- answer (can be comma-separated for multiple answers)");
+        return;
+      }
+
+      setParsedQuestions(questions);
+      setShowPreview(true);
+      
+      console.log(`Parsed ${questions.length} questions`);
+    } catch (error) {
+      console.error("Error processing data:", error);
+      alert("Error processing uploaded data. Please check the file format.");
+    }
+  }
+
+  // Bulk upload parsed questions
+  async function bulkUploadQuestions() {
+    if (!uploadCourse) {
+      alert("Please select a course for bulk upload");
+      return;
+    }
+
+    if (!uploadChapter) {
+      alert("Please select a chapter/category for bulk upload");
+      return;
+    }
+
+    if (parsedQuestions.length === 0) {
+      alert("No questions to upload");
+      return;
+    }
+
+    if (!confirm(`Upload ${parsedQuestions.length} questions to ${uploadCourse} - ${uploadChapter}?`)) {
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const questionsRef = collection(db, "mcqs", uploadCourse, "questions");
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const question of parsedQuestions) {
+        try {
+          const payload = {
+            question: question.question,
+            questionImage: question.questionImage || "",
+            options: question.options,
+            answers: question.answers,
+            answer: question.answers[0], // Backward compatibility
+            category: uploadChapter,
+            courseId: uploadCourse,
+            description: question.description || "",
+            createdAt: new Date().toISOString()
+          };
+
+          await addDoc(questionsRef, payload);
+          successCount++;
+        } catch (error) {
+          console.error("Error uploading question:", question.question, error);
+          errorCount++;
+        }
+      }
+
+      alert(`Upload complete!\nSuccess: ${successCount}\nErrors: ${errorCount}`);
+      
+      // Reset upload states
+      setParsedQuestions([]);
+      setShowPreview(false);
+      setUploadFile(null);
+      
+      // Reload MCQs
+      loadMCQs(selectedCategory, selectedChapter);
+      
+    } catch (error) {
+      console.error("Bulk upload error:", error);
+      alert("Error during bulk upload. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // Download sample CSV template
+  function downloadSampleCSV() {
+    const sampleData = [
+      {
+        question: "What is the capital of France?",
+        description: "Geography question about European capitals",
+        option1: "Paris",
+        option2: "London",
+        option3: "Berlin",
+        option4: "Madrid",
+        answer: "Paris"
+      },
+      {
+        question: "Which of the following are programming languages?",
+        description: "Multiple correct answers example",
+        option1: "Python",
+        option2: "HTML",
+        option3: "JavaScript",
+        option4: "CSS",
+        answer: "Python,JavaScript"
+      }
+    ];
+
+    const csv = Papa.unparse(sampleData);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'mcq_template.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
   if (loading || loadingCourses) return <div className="flex items-center justify-center min-h-screen"><div>Loading...</div></div>;
   if (!user || !isAdmin) return <div className="flex items-center justify-center min-h-screen"><div>Access Denied</div></div>;
   if (courses.length === 0) return <div className="flex items-center justify-center min-h-screen"><div>No courses found. Please add courses first.</div></div>;
@@ -877,6 +1119,143 @@ export default function ManageMCQs() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Bulk Upload Section */}
+        <div className="bg-white p-6 rounded shadow mb-8">
+          <h2 className="text-lg font-semibold mb-4">Bulk Upload MCQs from CSV/Excel</h2>
+          
+          <div className="bg-blue-50 border border-blue-200 p-4 rounded mb-4">
+            <p className="text-sm text-blue-800 mb-2">
+              <strong>Instructions:</strong> Upload a CSV or Excel file with the following columns:
+            </p>
+            <ul className="list-disc ml-6 text-sm text-blue-700">
+              <li><strong>question</strong> - The question text (required)</li>
+              <li><strong>description</strong> - Optional explanation or context</li>
+              <li><strong>option1, option2, option3, option4</strong> - Answer options (at least 2 required)</li>
+              <li><strong>answer</strong> - Correct answer(s). For multiple answers, separate with commas (e.g., &quot;Python,JavaScript&quot;)</li>
+            </ul>
+            <button 
+              onClick={downloadSampleCSV}
+              className="mt-3 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm"
+            >
+              📥 Download Sample CSV Template
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Course for Upload
+              </label>
+              <select
+                value={uploadCourse}
+                onChange={(e) => {
+                  setUploadCourse(e.target.value);
+                  setUploadChapter("");
+                }}
+                className="border p-2 w-full rounded"
+              >
+                <option value="">Select a course...</option>
+                {courses.map(course => (
+                  <option key={course.id} value={course.id}>
+                    {course.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Chapter/Category for Upload
+              </label>
+              <select
+                value={uploadChapter}
+                onChange={(e) => setUploadChapter(e.target.value)}
+                className="border p-2 w-full rounded"
+                disabled={!uploadCourse}
+              >
+                <option value="">Select a chapter...</option>
+                {uploadCourse && chapters.length > 0 ? (
+                  chapters.map(chapter => (
+                    <option key={chapter.id} value={chapter.title}>
+                      {chapter.title}
+                    </option>
+                  ))
+                ) : null}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex gap-3 items-center mb-4">
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              onChange={handleFileUpload}
+              className="border p-2 flex-1"
+            />
+          </div>
+
+          {showPreview && parsedQuestions.length > 0 && (
+            <div className="border rounded p-4 bg-gray-50">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-semibold text-lg">
+                  Preview: {parsedQuestions.length} Questions Parsed
+                </h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={bulkUploadQuestions}
+                    disabled={uploading || !uploadCourse || !uploadChapter}
+                    className={`px-4 py-2 rounded text-white ${
+                      uploading || !uploadCourse || !uploadChapter
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-green-500 hover:bg-green-600'
+                    }`}
+                  >
+                    {uploading ? '⏳ Uploading...' : '✅ Upload All Questions'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setParsedQuestions([]);
+                      setShowPreview(false);
+                      setUploadFile(null);
+                    }}
+                    className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-96 overflow-y-auto">
+                {parsedQuestions.map((q, idx) => (
+                  <div key={idx} className="bg-white p-3 rounded mb-2 border">
+                    <p className="font-medium mb-2">
+                      {idx + 1}. {q.question}
+                    </p>
+                    {q.description && (
+                      <p className="text-sm text-gray-600 mb-2">
+                        <em>Description: {q.description}</em>
+                      </p>
+                    )}
+                    <ul className="list-disc ml-6 text-sm mb-2">
+                      {q.options.map((opt, i) => (
+                        <li 
+                          key={i} 
+                          className={q.answers.includes(opt.text) ? 'text-green-600 font-semibold' : ''}
+                        >
+                          {opt.text} {q.answers.includes(opt.text) ? '✓' : ''}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-green-600 text-sm font-semibold">
+                      Correct: {q.answers.join(', ')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Show MCQs */}
