@@ -6,12 +6,57 @@ import { motion } from "framer-motion";
 
 const blogPosts = [
   {
-    id: 'software-training-institutes-vijayawada',
-    title: 'Top 5 Software Training Institutes in Vijayawada - Why VAWE Leads',
-    excerpt: 'Discover the best software training institutes in Vijayawada and learn why VAWE Institutes stands out with our comprehensive programming courses and placement assistance.',
+    id: 'best-software-institutes-andhra-pradesh',
+    title: 'Best Software Training Institutes in Andhra Pradesh (AP) 2024',
+    excerpt: 'Complete guide to top software institutes across Andhra Pradesh - Vijayawada, Visakhapatnam, Guntur, Amaravati, Eluru. Find the best institute for your career.',
     image: '/LmsImg.jpg',
+    date: '2024-01-20',
+    readTime: '12 min read',
+    category: 'Institute Guide'
+  },
+  {
+    id: 'software-training-institutes-vijayawada',
+    title: 'Top Software Training Institutes in Vijayawada - VAWE #1 Choice',
+    excerpt: 'Discover the best software training institutes in Vijayawada and learn why VAWE Institutes stands out with comprehensive programming courses and 95% placement rate.',
+    image: '/codingimage.jpg',
+    date: '2024-01-18',
+    readTime: '10 min read',
+    category: 'Institute Guide'
+  },
+  {
+    id: 'best-software-institutes-visakhapatnam-vizag',
+    title: 'Best Software Training Institutes in Visakhapatnam (Vizag) 2024',
+    excerpt: 'Find top software training institutes in Visakhapatnam. Compare courses, placement records, and why VAWE is the leading choice in Vizag.',
+    image: '/javaimage.jpg',
+    date: '2024-01-17',
+    readTime: '9 min read',
+    category: 'Institute Guide'
+  },
+  {
+    id: 'top-software-institutes-guntur',
+    title: 'Top Software Training Institutes in Guntur - Complete Guide 2024',
+    excerpt: 'Explore the best software institutes in Guntur, AP. Comprehensive review of courses, fees, placements, and why VAWE leads the market.',
+    image: '/pythonimge.jpeg',
+    date: '2024-01-16',
+    readTime: '8 min read',
+    category: 'Institute Guide'
+  },
+  {
+    id: 'best-software-institutes-amaravati',
+    title: 'Best Software Training Institutes in Amaravati - Capital City Guide',
+    excerpt: 'Discover top-rated software training institutes in Amaravati. Learn programming, web development, and get placed with VAWE Institutes.',
+    image: '/react.jpg',
     date: '2024-01-15',
-    readTime: '5 min read',
+    readTime: '7 min read',
+    category: 'Institute Guide'
+  },
+  {
+    id: 'software-institutes-eluru-west-godavari',
+    title: 'Best Software Training Institutes in Eluru - West Godavari District',
+    excerpt: 'Find the best software training institutes in Eluru. Quality programming courses, expert trainers, and excellent placement support.',
+    image: '/crtimage.jpeg',
+    date: '2024-01-14',
+    readTime: '7 min read',
     category: 'Institute Guide'
   },
   {
