@@ -363,39 +363,61 @@
         } else if (assignment?.type === 'mcq') {
           const questions = assignment.questions || [];
           const totalCount = questions.length;
-          let passCount = 0;
+          let totalScore = 0;
+          let maxPossibleScore = 0;
+          
           if (totalCount > 0) {
             for (let i = 0; i < questions.length; i++) {
               const q = questions[i];
               const userAnswer = submission.mcqAnswers?.[i];
               
-              // Handle multiple correct answers
+              // Handle multiple correct answers with partial scoring
               if (Array.isArray(q.correctAnswers)) {
-                if (Array.isArray(userAnswer)) {
-                  // Compare arrays (order doesn't matter)
-                  const sortedCorrect = [...q.correctAnswers].sort((a, b) => a - b);
-                  const sortedUser = [...userAnswer].sort((a, b) => a - b);
-                  if (JSON.stringify(sortedCorrect) === JSON.stringify(sortedUser)) {
-                    passCount += 1;
+                const correctAnswers = q.correctAnswers;
+                const totalCorrectOptions = correctAnswers.length;
+                maxPossibleScore += 1; // Each question is worth 1 point
+                
+                if (Array.isArray(userAnswer) && userAnswer.length > 0) {
+                  // Calculate partial score based on correct selections
+                  let correctSelections = 0;
+                  let wrongSelections = 0;
+                  
+                  // Count correct selections
+                  for (const selectedIndex of userAnswer) {
+                    if (correctAnswers.includes(selectedIndex)) {
+                      correctSelections++;
+                    } else {
+                      wrongSelections++;
+                    }
                   }
+                  
+                  // Calculate partial score: (correct_selections - wrong_selections) / total_correct_options
+                  // But ensure score doesn't go below 0
+                  const partialScore = Math.max(0, (correctSelections - wrongSelections) / totalCorrectOptions);
+                  totalScore += partialScore;
                 }
               } 
               // Handle legacy single correct answer
               else if (typeof q.correctAnswer === 'number') {
+                maxPossibleScore += 1;
                 if (userAnswer === q.correctAnswer) {
-                  passCount += 1;
+                  totalScore += 1;
                 }
               }
             }
           }
-          if (totalCount > 0 && passCount === totalCount) {
+          
+          // Convert to passCount for compatibility
+          const passCount = Math.round(totalScore);
+          
+          if (totalCount > 0 && totalScore === maxPossibleScore) {
             resultStatus = 'success';
-          } else if (passCount > 0) {
+          } else if (totalScore > 0) {
             resultStatus = 'partial';
           } else {
             resultStatus = 'fail';
           }
-          testSummary = { passCount, totalCount };
+          testSummary = { passCount, totalCount, partialScore: totalScore, maxScore: maxPossibleScore };
         }
 
         const baseData = {
@@ -407,7 +429,9 @@
           ...submission,
         };
 
-        const autoScore = testSummary?.totalCount
+        const autoScore = testSummary?.maxScore
+          ? Math.round((testSummary.partialScore / testSummary.maxScore) * 100)
+          : testSummary?.totalCount
           ? Math.round((testSummary.passCount / testSummary.totalCount) * 100)
           : null;
 
@@ -633,6 +657,14 @@
                       <span className="text-sm font-semibold text-gray-900">{existingSubmission.autoScore}%</span>
                     </div>
                   )}
+                  {existingSubmission.testSummary?.partialScore !== undefined && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-700">Detailed Score</span>
+                      <span className="text-sm font-semibold text-gray-900">
+                        {Math.round(existingSubmission.testSummary.partialScore * 100) / 100} / {existingSubmission.testSummary.maxScore}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -695,16 +727,52 @@
                               ? (Array.isArray(userAnswer) && userAnswer.includes(oIndex))
                               : (userAnswer === oIndex);
                             
+                            // Determine if this option is correct
+                            const isCorrectOption = hasMultipleAnswers 
+                              ? (Array.isArray(question.correctAnswers) && question.correctAnswers.includes(oIndex))
+                              : (question.correctAnswer === oIndex);
+                            
+                            // Determine if user selected this option
+                            const userSelected = isChecked;
+                            
+                            // Determine styling based on submission status
+                            let optionStyle = '';
+                            let iconElement = null;
+                            
+                            if (existingSubmission) {
+                              if (isCorrectOption && userSelected) {
+                                // Correct answer selected by user
+                                optionStyle = 'bg-green-50 border-green-400 shadow-sm';
+                                iconElement = (
+                                  <span className="text-green-600 font-bold text-lg">✓</span>
+                                );
+                              } else if (isCorrectOption && !userSelected) {
+                                // Correct answer not selected by user
+                                optionStyle = 'bg-green-100 border-green-300';
+                                iconElement = (
+                                  <span className="text-green-600 font-bold text-lg">✓</span>
+                                );
+                              } else if (!isCorrectOption && userSelected) {
+                                // Wrong answer selected by user
+                                optionStyle = 'bg-red-50 border-red-400 shadow-sm';
+                                iconElement = (
+                                  <span className="text-red-600 font-bold text-lg">✗</span>
+                                );
+                              } else {
+                                // Wrong answer not selected (neutral)
+                                optionStyle = 'bg-gray-50 border-gray-300';
+                              }
+                            } else {
+                              // Before submission
+                              optionStyle = isChecked
+                                ? 'bg-cyan-50 border-cyan-400 shadow-sm'
+                                : 'bg-white border-gray-300 hover:border-cyan-300 hover:bg-cyan-25';
+                            }
+                            
                             return (
                               <label 
                                 key={oIndex} 
-                                className={`block p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                                  existingSubmission 
-                                    ? 'cursor-default bg-gray-100 border-gray-300' 
-                                    : isChecked
-                                    ? 'bg-cyan-50 border-cyan-400 shadow-sm'
-                                    : 'bg-white border-gray-300 hover:border-cyan-300 hover:bg-cyan-25'
-                                }`}
+                                className={`block p-4 rounded-lg border-2 transition-all cursor-pointer ${optionStyle}`}
                               >
                                 <div className="flex items-center space-x-4">
                                   <input
@@ -720,16 +788,117 @@
                                       existingSubmission ? 'opacity-50' : ''
                                     }`}
                                   />
-                                  <span className={`text-gray-700 font-medium ${
+                                  <span className={`text-gray-700 font-medium flex-1 ${
                                     existingSubmission ? 'opacity-75' : ''
                                   }`}>
                                     {String.fromCharCode(65 + oIndex)}. {option}
                                   </span>
+                                  {iconElement}
                                 </div>
                               </label>
                             );
                           })}
                         </div>
+                        
+                        {/* Correct Answers Display for Submitted Assignments */}
+                        {existingSubmission && (
+                          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                            <h5 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Correct Answer{Array.isArray(question.correctAnswers) && question.correctAnswers.length > 1 ? 's' : ''}
+                            </h5>
+                            <div className="text-sm text-green-700">
+                              {Array.isArray(question.correctAnswers) ? (
+                                <div>
+                                  <p className="mb-2">The correct answer{question.correctAnswers.length > 1 ? 's are' : ' is'}:</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {question.correctAnswers.map((correctIndex, idx) => (
+                                      <span 
+                                        key={idx}
+                                        className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-200 text-green-800"
+                                      >
+                                        {String.fromCharCode(65 + correctIndex)}. {question.options[correctIndex]}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : typeof question.correctAnswer === 'number' ? (
+                                <div>
+                                  <p className="mb-2">The correct answer is:</p>
+                                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-200 text-green-800">
+                                    {String.fromCharCode(65 + question.correctAnswer)}. {question.options[question.correctAnswer]}
+                                  </span>
+                                </div>
+                              ) : (
+                                <p className="text-gray-600">No correct answer defined</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Score Breakdown for Submitted Assignments */}
+                        {existingSubmission && question.correctAnswers && (
+                          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <h5 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                              </svg>
+                              Score Breakdown
+                            </h5>
+                            {(() => {
+                              const userAnswer = submission.mcqAnswers[qIndex];
+                              const correctAnswers = question.correctAnswers;
+                              const totalCorrectOptions = correctAnswers.length;
+                              
+                              if (Array.isArray(userAnswer) && userAnswer.length > 0) {
+                                let correctSelections = 0;
+                                let wrongSelections = 0;
+                                
+                                // Count correct and wrong selections
+                                for (const selectedIndex of userAnswer) {
+                                  if (correctAnswers.includes(selectedIndex)) {
+                                    correctSelections++;
+                                  } else {
+                                    wrongSelections++;
+                                  }
+                                }
+                                
+                                const partialScore = Math.max(0, (correctSelections - wrongSelections) / totalCorrectOptions);
+                                const scorePercentage = Math.round(partialScore * 100);
+                                
+                                return (
+                                  <div className="text-sm text-blue-700">
+                                    <div className="flex justify-between items-center mb-2">
+                                      <span>Your Score:</span>
+                                      <span className="font-semibold">{scorePercentage}%</span>
+                                    </div>
+                                    <div className="text-xs text-blue-600">
+                                      Correct selections: {correctSelections} | Wrong selections: {wrongSelections} | Total correct options: {totalCorrectOptions}
+                                    </div>
+                                    <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
+                                      <div 
+                                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                        style={{ width: `${scorePercentage}%` }}
+                                      ></div>
+                                    </div>
+                                  </div>
+                                );
+                              } else {
+                                return (
+                                  <div className="text-sm text-blue-700">
+                                    <div className="flex justify-between items-center mb-2">
+                                      <span>Your Score:</span>
+                                      <span className="font-semibold">0%</span>
+                                    </div>
+                                    <div className="text-xs text-blue-600">No answer selected</div>
+                                  </div>
+                                );
+                              }
+                            })()}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

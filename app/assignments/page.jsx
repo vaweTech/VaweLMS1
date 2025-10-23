@@ -34,11 +34,20 @@ export default function StudentAssignmentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filterType, setFilterType] = useState('all');
+  const [filterCourse, setFilterCourse] = useState('all');
+  const [showSubmissions, setShowSubmissions] = useState(true);
+  const [onlySubmissions, setOnlySubmissions] = useState(false);
   const [sortBy, setSortBy] = useState('dueDate');
   const [sortOrder, setSortOrder] = useState('asc');
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
+
+  // Get unique courses for filter dropdown
+  const availableCourses = useMemo(() => {
+    const courses = [...new Set(assignments.map(assignment => assignment.courseTitle))];
+    return courses.sort();
+  }, [assignments]);
 
   // Memoized filtered and sorted assignments
   const filteredAssignments = useMemo(() => {
@@ -55,6 +64,18 @@ export default function StudentAssignmentsPage() {
     // Apply type filter
     if (filterType !== 'all') {
       filtered = filtered.filter(assignment => assignment.type === filterType);
+    }
+
+    // Apply course filter
+    if (filterCourse !== 'all') {
+      filtered = filtered.filter(assignment => assignment.courseTitle === filterCourse);
+    }
+
+    // Apply submission filters
+    if (onlySubmissions) {
+      filtered = filtered.filter(assignment => assignment.submission);
+    } else if (!showSubmissions) {
+      filtered = filtered.filter(assignment => !assignment.submission);
     }
 
     // Apply sorting
@@ -91,7 +112,7 @@ export default function StudentAssignmentsPage() {
     });
 
     return filtered;
-  }, [assignments, filterType, sortBy, sortOrder, searchTerm]);
+  }, [assignments, filterType, filterCourse, showSubmissions, onlySubmissions, sortBy, sortOrder, searchTerm]);
 
   // Get status priority for sorting
   const getStatusPriority = (assignment) => {
@@ -394,7 +415,7 @@ export default function StudentAssignmentsPage() {
 
           {/* Filters and Search */}
           <div className="bg-white rounded-lg shadow-md p-4 mb-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -406,6 +427,18 @@ export default function StudentAssignmentsPage() {
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                 />
               </div>
+
+              {/* Course Filter */}
+              <select
+                value={filterCourse}
+                onChange={(e) => setFilterCourse(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+              >
+                <option value="all">All Courses</option>
+                {availableCourses.map(course => (
+                  <option key={course} value={course}>{course}</option>
+                ))}
+              </select>
 
               {/* Type Filter */}
               <select
@@ -439,6 +472,57 @@ export default function StudentAssignmentsPage() {
                 {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
               </button>
             </div>
+
+            {/* Submission Filters */}
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="flex flex-wrap gap-4 items-center">
+                <span className="text-sm font-medium text-gray-700">Submission Status:</span>
+                
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showSubmissions}
+                    onChange={(e) => {
+                      setShowSubmissions(e.target.checked);
+                      if (!e.target.checked) {
+                        setOnlySubmissions(false);
+                      }
+                    }}
+                    className="w-4 h-4 text-cyan-600 border-gray-300 rounded focus:ring-cyan-500"
+                  />
+                  <span className="text-sm text-gray-700">Show submissions</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={onlySubmissions}
+                    onChange={(e) => {
+                      setOnlySubmissions(e.target.checked);
+                      if (e.target.checked) {
+                        setShowSubmissions(true);
+                      }
+                    }}
+                    disabled={!showSubmissions}
+                    className="w-4 h-4 text-cyan-600 border-gray-300 rounded focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <span className="text-sm text-gray-700">Only submissions</span>
+                </label>
+
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilterType('all');
+                    setFilterCourse('all');
+                    setShowSubmissions(true);
+                    setOnlySubmissions(false);
+                  }}
+                  className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
+                >
+                  Clear All Filters
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Progress Tests List */}
@@ -453,6 +537,9 @@ export default function StudentAssignmentsPage() {
                     onClick={() => {
                       setSearchTerm('');
                       setFilterType('all');
+                      setFilterCourse('all');
+                      setShowSubmissions(true);
+                      setOnlySubmissions(false);
                     }}
                     className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition"
                   >
