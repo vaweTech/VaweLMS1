@@ -816,9 +816,19 @@ export default function UserManagerPage() {
             <select
               value={selectedClass}
               onChange={(e) => {
-                setSelectedClass(e.target.value);
+                const classId = e.target.value;
+                setSelectedClass(classId);
                 setSelectedCourse("");
                 setSelectedChapters([]);
+                
+                // If a class is selected, show which courses are already assigned
+                if (classId) {
+                  const currentClass = classes.find((c) => c.id === classId);
+                  if (currentClass?.courseIds && currentClass.courseIds.length > 0) {
+                    // Show a message about existing course assignments
+                    console.log(`Class "${currentClass.name}" has ${currentClass.courseIds.length} course(s) already assigned`);
+                  }
+                }
               }}
               className="border p-2 rounded w-full"
             >
@@ -830,6 +840,46 @@ export default function UserManagerPage() {
               ))}
             </select>
 
+            {/* Show existing course assignments for selected class */}
+            {selectedClass && (
+              <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                <h4 className="font-semibold text-blue-800 mb-2">Current Course Assignments</h4>
+                {(() => {
+                  const currentClass = classes.find((c) => c.id === selectedClass);
+                  if (currentClass?.courseIds && currentClass.courseIds.length > 0) {
+                    return (
+                      <div className="space-y-1">
+                        <p className="text-sm text-blue-700">
+                          This class has {currentClass.courseIds.length} course(s) assigned:
+                        </p>
+                        <ul className="text-sm text-blue-600 ml-4">
+                          {currentClass.courseTitles?.map((title, index) => (
+                            <li key={index} className="list-disc">
+                              {title}
+                              {currentClass.courseChapterAccess?.[currentClass.courseIds[index]] && (
+                                <span className="text-xs text-gray-500 ml-2">
+                                  ({currentClass.courseChapterAccess[currentClass.courseIds[index]].length} chapters)
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-xs text-blue-500 mt-2">
+                          💡 When you select a course below, previously assigned chapters will be pre-checked.
+                        </p>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <p className="text-sm text-blue-600">
+                        No courses assigned yet. Select a course below to assign chapters.
+                      </p>
+                    );
+                  }
+                })()}
+              </div>
+            )}
+
             {/* Select Course */}
             <select
               value={selectedCourse}
@@ -838,10 +888,25 @@ export default function UserManagerPage() {
                 setSelectedCourse(courseId);
                 fetchChapters(courseId);
                 // Prefill selectedChapters based on previous assignments for this class
-                const classStudents = students.filter((s) => s.classId === selectedClass);
-                const studentWithAccess = classStudents.find((s) => Array.isArray(s?.chapterAccess?.[courseId]) && s.chapterAccess[courseId].length > 0);
-                if (studentWithAccess) {
-                  setSelectedChapters(studentWithAccess.chapterAccess[courseId]);
+                if (selectedClass && courseId) {
+                  const currentClass = classes.find((c) => c.id === selectedClass);
+                  if (currentClass?.courseChapterAccess?.[courseId]) {
+                    // Use the class's stored chapter access
+                    setSelectedChapters(currentClass.courseChapterAccess[courseId]);
+                  } else {
+                    // Fallback: check students' chapter access
+                    const classStudents = students.filter((s) => 
+                      Array.isArray(s.classIds) ? s.classIds.includes(selectedClass) : s.classId === selectedClass
+                    );
+                    const studentWithAccess = classStudents.find((s) => 
+                      Array.isArray(s?.chapterAccess?.[courseId]) && s.chapterAccess[courseId].length > 0
+                    );
+                    if (studentWithAccess) {
+                      setSelectedChapters(studentWithAccess.chapterAccess[courseId]);
+                    } else {
+                      setSelectedChapters([]);
+                    }
+                  }
                 } else {
                   setSelectedChapters([]);
                 }

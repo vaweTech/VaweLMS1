@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import CheckAdminAuth from "@/lib/CheckAdminAuth";
+import * as XLSX from 'xlsx';
 
 export default function AdminPage() {
     const router = useRouter();
@@ -57,6 +58,9 @@ export default function AdminPage() {
   const [showProgressTestForm, setShowProgressTestForm] = useState(false);
   const [editingQuestionIndex, setEditingQuestionIndex] = useState(null);
   const [currentChapterContext, setCurrentChapterContext] = useState(null); // Store current chapter for category
+  const [excelFile, setExcelFile] = useState(null);
+  const [excelData, setExcelData] = useState([]);
+  const [showExcelPreview, setShowExcelPreview] = useState(false);
 
   // Concept/Topic categorization for coding questions
   const codingConceptTopics = [
@@ -128,6 +132,8 @@ export default function AdminPage() {
   ? newCourse.syllabus.split(",")
   : [];
 
+    let courseId = newCourse.id;
+
     if (newCourse.id) {
       await updateDoc(doc(db, "courses", newCourse.id), {
         title: newCourse.title,
@@ -136,14 +142,40 @@ export default function AdminPage() {
         syllabus: syllabusArray
       });
     } else {
-      await addDoc(collection(db, "courses"), {
+      const docRef = await addDoc(collection(db, "courses"), {
         title: newCourse.title,
         description: newCourse.description,
         courseCode: newCourse.courseCode,
         syllabus: syllabusArray,
         createdAt: new Date().toISOString()
       });
+      courseId = docRef.id;
     }
+
+    // If there's Excel data, create chapters automatically
+    if (excelData && excelData.length > 0 && courseId) {
+      try {
+        for (const chapterData of excelData) {
+          await addDoc(collection(db, "courses", courseId, "chapters"), {
+            title: chapterData.title,
+            topics: chapterData.topics,
+            video: chapterData.video,
+            liveClassLink: chapterData.liveClassLink,
+            recordedClassLink: chapterData.recordedClassLink,
+            pdfDocument: chapterData.pdfDocument,
+            classDocs: chapterData.classDocs,
+            order: parseInt(chapterData.order) || 1,
+            createdAt: new Date().toISOString()
+          });
+        }
+        alert(`✅ Course created successfully with ${excelData.length} chapters from Excel file!`);
+        clearExcelData();
+      } catch (error) {
+        console.error('Error creating chapters from Excel:', error);
+        alert('❌ Course created but failed to create chapters from Excel. Please try uploading chapters manually.');
+      }
+    }
+
     setNewCourse({ title: "", description: "", syllabus: "", courseCode: "" });
     fetchCourses();
   }
@@ -680,6 +712,84 @@ export default function AdminPage() {
     fetchCourses();
   }
 
+  // Handle Excel file upload
+  function handleExcelFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setExcelFile(file);
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        
+        // Process the data to ensure proper format
+        const processedData = jsonData.map((row, index) => ({
+          order: row.order || row.Order || row.OrderNumber || (index + 1),
+          title: row.title || row.Title || row.ChapterTitle || row.chapter || row.Chapter || row.Topic || '',
+          topics: row.topics || row.Topics || row.Description || '',
+          video: row.video || row.Video || row.VideoURL || '',
+          liveClassLink: row.liveClassLink || row.LiveClassLink || row.LiveClass || '',
+          recordedClassLink: row.recordedClassLink || row.RecordedClassLink || row.RecordedClass || '',
+          pdfDocument: row.pdfDocument || row.PDFDocument || row.PDF || '',
+          classDocs: row.classDocs || row.ClassDocs || row.PPT || row.PPTs || ''
+        })).filter(row => row.title.trim() !== ''); // Filter out empty rows
+        
+        setExcelData(processedData);
+        setShowExcelPreview(true);
+      } catch (error) {
+        console.error('Error parsing Excel file:', error);
+        alert('Error parsing Excel file. Please check the format and try again.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // Create chapters from Excel data
+  async function createChaptersFromExcel(courseId) {
+    if (!excelData || excelData.length === 0) {
+      alert('No data to process');
+      return;
+    }
+
+    try {
+      for (const chapterData of excelData) {
+        await addDoc(collection(db, "courses", courseId, "chapters"), {
+          title: chapterData.title,
+          topics: chapterData.topics,
+          video: chapterData.video,
+          liveClassLink: chapterData.liveClassLink,
+          recordedClassLink: chapterData.recordedClassLink,
+          pdfDocument: chapterData.pdfDocument,
+          classDocs: chapterData.classDocs,
+          order: parseInt(chapterData.order) || 1,
+          createdAt: new Date().toISOString()
+        });
+      }
+      
+      alert(`✅ Successfully created ${excelData.length} chapters from Excel file!`);
+      setExcelData([]);
+      setExcelFile(null);
+      setShowExcelPreview(false);
+      fetchCourses();
+    } catch (error) {
+      console.error('Error creating chapters:', error);
+      alert('❌ Error creating chapters. Please try again.');
+    }
+  }
+
+  // Clear Excel data
+  function clearExcelData() {
+    setExcelData([]);
+    setExcelFile(null);
+    setShowExcelPreview(false);
+  }
+
   return (
     <CheckAdminAuth>
     <div className="p-8 bg-gray-100 min-h-screen">
@@ -699,6 +809,39 @@ export default function AdminPage() {
           <input className="border p-2 rounded" placeholder="Course Code (Unique)" value={newCourse.courseCode} onChange={(e) => setNewCourse({ ...newCourse, courseCode: e.target.value })} />
           <textarea className="border p-2 rounded col-span-2" placeholder="Description" value={newCourse.description} onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })} />
           <textarea className="border p-2 rounded col-span-2" placeholder="Syllabus (comma separated)" value={newCourse.syllabus} onChange={(e) => setNewCourse({ ...newCourse, syllabus: e.target.value })} />
+          
+          {/* Excel Upload Section */}
+          <div className="col-span-2 border-t pt-4 mt-4">
+            <h3 className="text-lg font-medium mb-3">📊 Upload Chapters from Excel File</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Excel File (.xlsx, .xls)
+                </label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleExcelFileUpload}
+                  className="border p-2 rounded w-full"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Excel file should contain columns: order, title, topics, video, liveClassLink, recordedClassLink, pdfDocument, classDocs
+                </p>
+              </div>
+              
+              {excelFile && (
+                <div className="bg-blue-50 p-3 rounded">
+                  <p className="text-sm font-medium text-blue-800">
+                    📁 Selected file: {excelFile.name}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    File size: {(excelFile.size / 1024).toFixed(2)} KB
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          
           <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded col-span-2">{newCourse.id ? "Update Course" : "Add Course"}</button>
         </form>
       </div>
@@ -2018,6 +2161,72 @@ Example:
                 className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-gray-300"
               >
                 Add Selected ({selectedQuestions.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excel Preview Modal */}
+      {showExcelPreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-4xl max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">
+                📊 Excel Data Preview - {excelData.length} chapters found
+              </h3>
+              <button 
+                onClick={clearExcelData}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-gray-600">
+                Review the data below before creating chapters. You can edit the data if needed.
+              </p>
+            </div>
+            
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {excelData.map((chapter, index) => (
+                <div key={index} className="border p-3 rounded bg-gray-50">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Order: {chapter.order}</p>
+                      <p className="text-sm font-medium text-gray-700">Title: {chapter.title}</p>
+                      <p className="text-xs text-gray-600">Topics: {chapter.topics || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600">Video: {chapter.video || 'Not specified'}</p>
+                      <p className="text-xs text-gray-600">Live Class: {chapter.liveClassLink || 'Not specified'}</p>
+                      <p className="text-xs text-gray-600">Recorded: {chapter.recordedClassLink || 'Not specified'}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex justify-end gap-2 mt-4">
+              <button 
+                onClick={clearExcelData}
+                className="bg-gray-500 text-white px-4 py-2 rounded"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  if (newCourse.id) {
+                    createChaptersFromExcel(newCourse.id);
+                  } else {
+                    alert('Please create the course first, then upload Excel data.');
+                  }
+                }}
+                disabled={!newCourse.id}
+                className="bg-green-500 text-white px-4 py-2 rounded disabled:bg-gray-300"
+              >
+                Create {excelData.length} Chapters
               </button>
             </div>
           </div>
