@@ -89,7 +89,7 @@ export default function StudentAssignmentsPage() {
           break;
         case 'title':
           aValue = a.title.toLowerCase();
-          bValue = b.title.toLowerCase();
+          bValue = b.title.toLowerCase(); 
           break;
         case 'course':
           aValue = a.courseTitle.toLowerCase();
